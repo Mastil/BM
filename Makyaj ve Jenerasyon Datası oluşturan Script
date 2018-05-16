@@ -1,0 +1,279 @@
+
+--While denemesi
+-- Tablolardan Id silinecek.
+--Makyaj adteleri yazdırılırken sorun yanlis yazıyor olabilir kontrol edilecek.
+--Getdate() konulmali mi. 
+--ihtiyac olan diger kolonlar neler. Tespit edilecek.
+--Konrol mekanizması gelistirilecek.
+--Hic makyaj gormemis aracların elimine edilerek hepsine makyajsiz yazılacak sonra while calistirilacak yaklasik 185749 data while dan cikmis olacak.
+--Bu islem yapildiktan sonra while sonucu ile diger sonucun ciktisini karsilastir.
+
+
+create table ##kontrol_value (data_Value nvarchar(50))
+create table ##jenerasyon (data_Value nvarchar(50))
+
+
+select 
+	v.vehicle_id,
+	e.data_value,
+	id_101,
+	id_104,
+	id_108
+into ##x
+from dbo.version as v 
+ left join dbo.equipment as e on e.vehicle_id=v.vehicle_id and schema_id = 105 and (data_value = 'F'  or data_value = 'N')
+--where v.id_101 =128337 or id_101 =128333 --or id_101 =372327  or id_101 =415932  or id_101 =167542  or id_101 =7841135
+order by id_101, id_104
+
+--select * from ##x
+--update ##x set data_value = null
+--where data_value = 'N' and  id_101= 372327
+
+----Diger kontrol
+--update ##x set data_value = null
+--where data_value = 'N' and  id_101= 7841161
+
+
+declare @max int 
+declare @Makyaj varchar(50)
+declare @New varchar(50)
+declare @Id int = 1
+declare @id_104 int
+declare @id_108 int
+declare @id_101 int
+declare @id_101_eski int
+declare @data_value varchar(50)
+declare @makyaj_durumu varchar(100)
+declare @data_value_eski varchar(50)
+declare @eski_Makyaj varchar(100)
+declare @kontrol_Value varchar(100) = ''
+declare @vehicle_id bigint 
+declare @jenerasyon nvarchar(100)=''
+
+
+ select @max=COUNT(0) from ##x
+
+  
+  select top 1
+	ROW_NUMBER() over (order by (select 100)) as Id,
+	vehicle_id,
+	data_value,
+	id_101,
+	id_104,
+	id_108,
+	CAST('Makyaj' as nvarchar(100)) as Makyaj,
+	CAST('Jenerasyon' as nvarchar(100)) as Jenerasyon
+	into ##sonuc
+from ##x
+
+truncate table ##sonuc
+--
+
+ select 
+	ROW_NUMBER() over (order by (select 100)) as Id,
+	vehicle_id,
+	data_value,
+	id_101,
+	id_104,
+	id_108
+	into ##xx
+from ##x
+
+
+ while (@Id<=@max)
+	 begin
+
+		 
+		select
+			@vehicle_id=vehicle_id,
+			@data_value=data_value,
+			@id_101=id_101,
+			@id_104=id_104,
+			@id_108=id_108
+		from ##xx	
+		where Id = @Id
+
+
+		select 
+			@id_101_eski=id_101,
+			@data_value_eski=data_value
+		from ##xx
+		where Id = (@Id-1)
+
+
+		select  
+			@eski_Makyaj=Makyaj
+		from ##sonuc
+		where Id = (@Id-1)
+		
+		
+		
+		if(@id_101<>@id_101_eski)
+		begin
+
+			truncate table ##kontrol_value
+			truncate table ##jenerasyon
+
+		end
+
+
+		if(@id_101=@id_101_eski or (@data_value=N'F' and (@id_101_eski is null or @id_101<>@id_101_eski)))
+		begin
+
+			insert into ##kontrol_value
+			select data_value from ##xx
+			where Id=@Id and data_value = N'F'
+
+		end
+
+		if(@id_101=@id_101_eski or (@data_value=N'N' and (@id_101_eski is null or @id_101<>@id_101_eski)))
+		begin
+
+			insert into ##jenerasyon
+			select data_value from ##xx
+			where Id=@Id and data_value = N'N'
+			
+		end
+		
+	if(@data_value is null and @Id=1) 
+		begin
+
+			set @makyaj_durumu = N'Makyajsiz'
+			set @jenerasyon = '0'
+			
+			insert into ##sonuc (Id,vehicle_id,data_value,id_101,id_104,id_108,Makyaj,Jenerasyon)
+			values
+			(@Id,@vehicle_id,@data_value,@id_101,@id_104,@id_108,@makyaj_durumu,@jenerasyon)
+
+		end
+
+
+
+	if(@data_value is null and @id_101<>@id_101_eski)
+		
+		begin
+
+			set @makyaj_durumu = N'Makyajsiz'
+			set @jenerasyon = N'0'
+
+			truncate table ##kontrol_value
+			truncate table ##jenerasyon
+
+
+			insert into ##sonuc (Id,vehicle_id,data_value,id_101,id_104,id_108,Makyaj,Jenerasyon)
+			values
+			(@Id,@vehicle_id,@data_value,@id_101,@id_104,@id_108,@makyaj_durumu,@jenerasyon)
+
+		end
+
+
+
+
+	if(@data_value = N'N' and (@data_value_eski is null or @data_value_eski = N'N' or @data_value_eski = N'F'))
+
+		begin
+
+			set @makyaj_durumu = N'Makyajsiz'
+			select @jenerasyon=COUNT(0) from ##jenerasyon
+			where data_Value = N'N'
+
+			truncate table ##kontrol_value
+
+			insert into ##sonuc (Id,vehicle_id,data_value,id_101,id_104,id_108,Makyaj,Jenerasyon)
+			values
+			(@Id,@vehicle_id,@data_value,@id_101,@id_104,@id_108,@makyaj_durumu,@jenerasyon)
+
+		end
+
+
+
+
+	if(@data_value = N'F' AND (@data_value_eski is null or @data_value_eski = N'F' or @data_value_eski = N'N'))  
+
+		Begin
+
+			select @kontrol_Value=count(0) from ##kontrol_value
+			where data_Value is not null
+
+				if(@kontrol_Value =0)
+				begin
+
+					set @kontrol_Value = ''
+
+				end
+
+			set @makyaj_durumu = N'Makyajli'
+
+			select @jenerasyon=COUNT(0) from ##jenerasyon
+			where data_Value = N'N'
+
+			insert into ##sonuc (Id,vehicle_id,data_value,id_101,id_104,id_108,Makyaj,Jenerasyon)
+			values
+			(@Id,@vehicle_id,@data_value,@id_101,@id_104,@id_108,(@kontrol_Value+' '+@makyaj_durumu),@jenerasyon)
+
+		End
+
+
+
+
+		if(@data_value is null and @eski_Makyaj = N'Makyajsiz'and @id_101=@id_101_eski )  
+
+		Begin
+			set @makyaj_durumu = N'Makyajsiz'
+
+			truncate table ##kontrol_value
+
+			select @jenerasyon=COUNT(0) from ##jenerasyon
+			where data_Value = N'N'
+
+			insert into ##sonuc (Id,vehicle_id,data_value,id_101,id_104,id_108,Makyaj,Jenerasyon)
+			values
+			(@Id,@vehicle_id,@data_value,@id_101,@id_104,@id_108,@makyaj_durumu,@jenerasyon)
+
+		End
+
+
+
+			if( @data_value is null and @eski_Makyaj like N'% Makyajli%' and @id_101=@id_101_eski )  
+		Begin
+
+			select @kontrol_Value=count(0) from ##kontrol_value
+			where data_Value is not null
+
+			select @jenerasyon=COUNT(0) from ##jenerasyon
+			where data_Value = N'N'
+
+				if(@kontrol_Value =0)
+				begin
+					set @kontrol_Value = ''
+				end
+
+			set @makyaj_durumu =N'Makyajli' --@eski makyaj konulabilir
+			insert into ##sonuc (Id,vehicle_id,data_value,id_101,id_104,id_108,Makyaj,Jenerasyon)
+			values
+			(@Id,@vehicle_id,@data_value,@id_101,@id_104,@id_108,(@kontrol_Value+' '+@makyaj_durumu),@jenerasyon)
+
+		End
+
+
+
+		set @Id += 1
+	end
+
+
+
+
+	select * from ##sonuc
+	select * from ##xx
+	select * from ##kontrol_value
+
+
+	drop table ##sonuc
+	drop table ##x
+	drop table ##xx
+	drop table ##kontrol_value
+	drop table ##jenerasyon
+
+
+
+
